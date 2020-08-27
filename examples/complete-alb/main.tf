@@ -204,6 +204,20 @@ module "alb" {
     },
   ]
 
+  ipsets = [{
+    ipset_name    = "my_ipset"
+    waf_rule_name = "my_waf_rume"
+    priority      = 1
+    action        = "ALLOW"
+
+    ipset = [
+      {
+        type        = "IPV4"
+        ipset_value = "0.0.0.0/0"
+      }
+    ]
+  }]
+
   tags = {
     Project = "Unknown"
   }

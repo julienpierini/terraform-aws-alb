@@ -1,3 +1,9 @@
+variable "create_acl" {
+  description = "Create and attach an acl to cloudfront, if true you have to provide an ipsets list"
+  type        = bool
+  default     = false
+}
+
 variable "create_lb" {
   description = "Controls if the Load Balancer should be created"
   type        = bool
@@ -50,6 +56,25 @@ variable "idle_timeout" {
   description = "The time in seconds that the connection is allowed to be idle."
   type        = number
   default     = 60
+}
+
+variable "ipsets" {
+  description = "Ipsets definition to allow or deny"
+  type = list(
+    object({
+      ipset_name    = string,
+      waf_rule_name = string,
+      priority      = number,
+      action        = string,
+      ipset = list(
+        object({
+          type        = string,
+          ipset_value = string
+        })
+      )
+    })
+  )
+  default = []
 }
 
 variable "ip_address_type" {
@@ -158,4 +183,10 @@ variable "vpc_id" {
   description = "VPC id where the load balancer and other resources will be deployed."
   type        = string
   default     = null
+}
+
+variable "waf_default_action" {
+  description = "default action of the web acl"
+  type        = string
+  default     = "BLOCK"
 }

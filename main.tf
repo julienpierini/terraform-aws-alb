@@ -246,3 +246,69 @@ resource "aws_lb_listener_certificate" "https_listener" {
   listener_arn    = aws_lb_listener.frontend_https[var.extra_ssl_certs[count.index]["https_listener_index"]].arn
   certificate_arn = var.extra_ssl_certs[count.index]["certificate_arn"]
 }
+
+resource "aws_wafregional_ipset" "ipset" {
+  count = length(var.ipsets)
+
+  name = lookup(var.ipsets[count.index], "ipset_name", null)
+
+  dynamic "ip_set_descriptor" {
+    for_each = lookup(var.ipsets[count.index], "ipset", {})
+
+    content {
+      type  = lookup(ip_set_descriptor.value, "type", null)
+      value = lookup(ip_set_descriptor.value, "ipset_value", null)
+    }
+  }
+}
+
+resource "aws_wafregional_rule" "wafrule" {
+  count = length(var.ipsets)
+
+  depends_on  = [aws_wafregional_ipset.ipset]
+  name        = lookup(var.ipsets[count.index], "waf_rule_name", null)
+  metric_name = "${replace(lookup(var.ipsets[count.index], "waf_rule_name", "wafrule"), "_", "")}Metric"
+
+  predicate {
+    data_id = aws_wafregional_ipset.ipset[count.index].id
+    negated = false
+    type    = "IPMatch"
+  }
+}
+
+resource "aws_wafregional_web_acl" "waf_acl" {
+  count = length(var.ipsets) != 0 ? 1 : 0
+
+  depends_on = [
+    aws_wafregional_ipset.ipset,
+    aws_wafregional_rule.wafrule,
+  ]
+
+  name        = "acl-${var.name}"
+  metric_name = "${replace(replace("Acl${var.name}", "-", ""), "_", "")}Metric"
+
+  default_action {
+    type = var.waf_default_action
+  }
+
+  dynamic "rule" {
+    for_each = var.ipsets
+    content {
+      action {
+        type = lookup(rule.value, "action", null)
+      }
+
+      priority = lookup(rule.value, "priority", null)
+      rule_id  = aws_wafregional_rule.wafrule[index(var.ipsets, rule.value)].id
+      type     = "REGULAR"
+    }
+  }
+}
+
+resource "aws_wafregional_web_acl_association" "association" {
+  count = length(var.ipsets) != 0 ? 1 : 0
+  depends_on  = [aws_wafregional_web_acl.waf_acl]
+
+  resource_arn = module.alb.this_lb_arn
+  web_acl_id   = aws_wafregional_web_acl.waf_acl[0].id
+}
